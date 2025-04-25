@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Excel 随机数填充与预览</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    main { max-width: 800px; margin: auto; }
+    #preview table { border-collapse: collapse; margin-top: 20px; width: 100%; }
+    #preview td, #preview th { border: 1px solid #ccc; padding: 5px; text-align: center; }
+    button, input { margin: 8px 0; padding: 6px 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Excel 随机数填充与预览</h1>
+    <input type="file" id="inputExcel" accept=".xlsx,.xls">
+    <button id="processBtn" disabled>处理并下载</button>
+    <section id="preview"></section>
+  </main>
+
+  <!-- 引入依赖 -->
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script>
+    const inputExcel = document.getElementById('inputExcel');
+    const processBtn = document.getElementById('processBtn');
+    const previewDiv = document.getElementById('preview');
+    let workbook;
+
+    const blankRange = 'A1:G4';  // 28 格范围
+    const targetCell = 'A6';      // 目标和单元格
+
+    inputExcel.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = evt => {
+        workbook = XLSX.read(evt.target.result, { type: 'binary' });
+        processBtn.disabled = false;
+      };
+      reader.readAsBinaryString(file);
+    });
+
+    function randomPartition(n, sum) {
+      const cuts = Array.from({ length: n - 1 }, () => Math.random()).sort();
+      const parts = [];
+      let prev = 0;
+      cuts.forEach(c => {
+        parts.push(Math.floor((c - prev) * sum));
+        prev = c;
+      });
+      parts.push(sum - parts.reduce((a, b) => a + b, 0));
+      // 确保最小为 1
+      return parts.map(x => (x < 1 ? 1 : x));
+    }
+
+    function expandRange(range) {
+      const { s, e } = XLSX.utils.decode_range(range);
+      const cells = [];
+      for (let r = s.r; r <= e.r; r++) {
+        for (let c = s.c; c <= e.c; c++) {
+          cells.push(XLSX.utils.encode_cell({ r, c }));
+        }
+      }
+      return cells;
+    }
+
+    function s2ab(str) {
+      return new TextEncoder().encode(str);
+    }
+
+    processBtn.addEventListener('click', () => {
+      const ws = workbook.Sheets[workbook.SheetNames[0]];
+      const target = Number(ws[targetCell]?.v);
+      if (isNaN(target) || target <= 0) {
+        alert('请在 ' + targetCell + ' 填入有效数字');
+        return;
+      }
+      const nums = randomPartition(9, target);
+      const cells = expandRange(blankRange);
+      const posSet = new Set();
+      while (posSet.size < 9) {
+        posSet.add(cells[Math.floor(Math.random() * cells.length)]);
+      }
+      Array.from(posSet).forEach((cell, i) => {
+        ws[cell] = { t: 'n', v: nums[i] };
+      });
+      const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'binary' });
+      saveAs(new Blob([s2ab(wbout)], { type: 'application/octet-stream' }), 'processed.xlsx');
+      previewDiv.innerHTML = XLSX.utils.sheet_to_html(ws);
+    });
+  </script>
+</body>
+</html>
